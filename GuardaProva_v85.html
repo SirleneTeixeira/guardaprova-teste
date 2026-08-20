@@ -1424,7 +1424,7 @@ function visualizarDoc(i) {
   if (doc.tipo.includes('image')) {
     conteudo = `<img src="${doc.dados}" class="documento-preview" style="max-height:600px;object-fit:contain;">`;
   } else if (doc.tipo.includes('pdf')) {
-    conteudo = `<div id="pdf-container-${Date.now()}" class="pdf-container" style="width:100%;min-height:400px"></div>`;
+    conteudo = `<iframe src="${doc.dados}" style="width:100%;height:70vh;border:none;border-radius:8px;background:#fff"></iframe>`;
   } else if (doc.tipo.includes('audio')) {
     const url = getUrlVisualizacao(doc);
     conteudo = `<audio controls preload="metadata" src="${url}" style="width:100%;"></audio>`;
@@ -1437,10 +1437,6 @@ function visualizarDoc(i) {
   }
   document.getElementById('modal-body-content').innerHTML = conteudo;
   document.getElementById('modal-viewer').classList.add('active');
-  if (doc.tipo.includes('pdf')) {
-    const c = document.querySelector('#modal-body-content .pdf-container');
-    if (c && window.renderPdfInline) window.renderPdfInline(doc.dados, c);
-  }
 }
 
 function fecharModal() {
@@ -1464,7 +1460,7 @@ function visualizarDocSalvo(provaId, docIndex) {
   if (doc.tipo.includes('image')) {
     conteudo = `<img src="${doc.dados}" class="documento-preview" style="max-height:600px;object-fit:contain;">`;
   } else if (doc.tipo.includes('pdf')) {
-    conteudo = `<div id="pdf-container-${Date.now()}" class="pdf-container" style="width:100%;min-height:400px"></div>`;
+    conteudo = `<iframe src="${doc.dados}" style="width:100%;height:70vh;border:none;border-radius:8px;background:#fff"></iframe>`;
   } else if (doc.tipo.includes('audio')) {
     const url = getUrlVisualizacao(doc);
     conteudo = `<audio controls preload="metadata" src="${url}" style="width:100%;"></audio>`;
@@ -1477,10 +1473,6 @@ function visualizarDocSalvo(provaId, docIndex) {
   }
   document.getElementById('modal-body-content').innerHTML = conteudo;
   document.getElementById('modal-viewer').classList.add('active');
-  if (doc.tipo.includes('pdf')) {
-    const c = document.querySelector('#modal-body-content .pdf-container');
-    if (c && window.renderPdfInline) window.renderPdfInline(doc.dados, c);
-  }
 }
 
 function imprimirDocSalvo(provaId, docIndex) {
