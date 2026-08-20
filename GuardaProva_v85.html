@@ -10110,12 +10110,15 @@ window.renderPdfInline = async function(dataUrl, container) {
   }
   container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--g,#d4af37)"><div style="font-size:28px;margin-bottom:8px">⏳</div>Carregando documento...</div>';
   try {
+    console.log('[GuardaProva] renderPdfInline: dataUrl inicia com "' + (dataUrl ? dataUrl.substring(0, 40) : 'null/undefined') + '", tamanho total ' + (dataUrl ? dataUrl.length : 0) + ' chars');
     var base64 = dataUrl.split(',')[1];
     var bin = atob(base64);
     var bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    console.log('[GuardaProva] renderPdfInline: base64 decodificado, ' + bytes.length + ' bytes');
 
     var pdf = await pdfjsLib.getDocument({data: bytes}).promise;
+    console.log('[GuardaProva] renderPdfInline: PDF aberto, ' + pdf.numPages + ' páginas');
     container.innerHTML = '';
     var wrap = document.createElement('div');
     wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;max-height:70vh;overflow-y:auto;background:#525659;padding:12px;border-radius:8px;';
@@ -10136,7 +10139,7 @@ window.renderPdfInline = async function(dataUrl, container) {
     }
   } catch(err) {
     console.error('[GuardaProva] Erro ao renderizar PDF:', err);
-    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--er,#ff6b6b)"><div style="font-size:32px;margin-bottom:8px">⚠️</div>Não foi possível exibir o PDF.<br><small style="color:var(--ts,#888)">' + (err.message || 'erro desconhecido') + '</small></div>';
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:#ff3333"><div style="font-size:32px;margin-bottom:8px">⚠️</div>Não foi possível exibir o PDF.<br><small style="color:#ff6666">' + (err.message || 'erro desconhecido') + '</small></div>';
   }
 };
 </script>
