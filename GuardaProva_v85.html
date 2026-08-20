@@ -1674,7 +1674,7 @@ function _siglaUF(nome){
   return map[limpo] || '';
 }
 
-function capturarLocalizacao(){
+async function capturarLocalizacao(){
   const btn = document.getElementById('btn-gps');
   const info = document.getElementById('novo-localizacao-info');
   const campo = document.getElementById('novo-localizacao');
@@ -1686,7 +1686,48 @@ function capturarLocalizacao(){
   
   btn.disabled = true;
   btn.innerHTML = '⏳ Capturando...';
-  info.innerHTML = '<span style="color:var(--g)">🛰️ Obtendo coordenadas do GPS, aguarde...</span>';
+  info.innerHTML = '<span style="color:var(--g)">🛰️ Buscando GPS preciso — até 3 tentativas...</span>';
+  
+  // ❶ Estratégia: até 3 tentativas de GPS satélite (8s cada), escolhe a mais precisa
+  // Para cedo se achar leitura excelente (<15m)
+  const leituras = [];
+  for (let tentativa = 1; tentativa <= 3; tentativa++){
+    info.innerHTML = '<span style="color:var(--g)">🛰️ Tentativa ' + tentativa + ' de 3 — aguarde...</span>';
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 0
+        });
+      });
+      leituras.push(pos);
+      // Achou leitura excelente? Não precisa mais tentar
+      if (pos.coords.accuracy < 15) break;
+    } catch(e) {
+      // Se todas as 3 falharam, tenta fallback aproximado (Wi-Fi/rede)
+      if (tentativa === 3 && leituras.length === 0){
+        info.innerHTML = '<span style="color:var(--g)">📡 GPS satélite falhou — tentando localização aproximada...</span>';
+        try {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: false, timeout: 10000, maximumAge: 0
+            });
+          });
+          leituras.push(pos);
+        } catch(e2){
+          _gpsErro(e2);
+          return;
+        }
+      }
+    }
+  }
+  
+  if (leituras.length === 0){ _gpsErro({code:2}); return; }
+  
+  // Escolhe a leitura mais precisa (menor accuracy em metros)
+  leituras.sort((a,b) => a.coords.accuracy - b.coords.accuracy);
+  await _gpsSucesso(leituras[0]);
   
   // Função interna que processa o resultado bem-sucedido
   async function _gpsSucesso(pos){
@@ -1695,8 +1736,6 @@ function capturarLocalizacao(){
     const precisao = Math.round(pos.coords.accuracy);
     
     window._novaCoordenadas = { lat: lat, lng: lng, precisao: precisao, capturadoEm: Date.now() };
-    info.innerHTML = '<span style="color:var(--eg)">✓ Localização capturada — ' + lat.toFixed(6) + ', ' + lng.toFixed(6) + ' (precisão ~' + precisao + 'm)</span>';
-    showToast('success','Localização capturada','Buscando endereço...');
     
     // Tentar obter endereço (não bloqueia se falhar)
     // Estratégia: Nominatim para rua/bairro/cidade + ViaCEP (Correios) para CEP correto
@@ -1741,12 +1780,29 @@ function capturarLocalizacao(){
         if (!campo.value.trim()){
           campo.value = enderecoFinal;
         }
-        info.innerHTML = '<span style="color:var(--eg)">✓ Endereço capturado pelo GPS</span>';
       } else if (data && data.display_name){
         if (!campo.value.trim()){
           campo.value = data.display_name.toUpperCase();
         }
-        info.innerHTML = '<span style="color:var(--eg)">✓ Localização capturada — Precisão ~' + precisao + 'm</span>';
+      }
+      
+      // ❷/❸ Feedback visual conforme precisão + libera edição se precisão baixa
+      if (precisao < 50){
+        info.innerHTML = '<span style="color:var(--eg)">✓ Endereço capturado pelo GPS (precisão ~' + precisao + 'm — excelente)</span>';
+      } else if (precisao < 100){
+        info.innerHTML = '<span style="color:#F39C12">⚠ Precisão ~' + precisao + 'm — confira o endereço abaixo, edite se necessário</span>';
+        // Libera edição manual
+        campo.removeAttribute('readonly');
+        campo.style.cursor = 'text';
+        campo.style.background = 'var(--k3)';
+        campo.title = 'Endereço aproximado — edite se estiver errado';
+      } else {
+        info.innerHTML = '<span style="color:#E74C3C">✗ Precisão ~' + precisao + 'm — endereço pode estar errado, edite manualmente</span>';
+        // Libera edição manual
+        campo.removeAttribute('readonly');
+        campo.style.cursor = 'text';
+        campo.style.background = 'var(--k3)';
+        campo.title = 'GPS impreciso — digite o endereço correto manualmente';
       }
     } catch(e) { /* sem rede ou timeout — coordenadas já estão salvas */ }
     
@@ -1758,47 +1814,23 @@ function capturarLocalizacao(){
     const motivos = {
       1: 'Permissão negada. Habilite localização nas configurações do navegador.',
       2: 'Sinal de GPS indisponível. Verifique se o GPS do aparelho está ligado.',
-      3: 'Tempo esgotado. Tente novamente em local aberto ou perto da janela.'
+      3: 'Tempo esgotado. Tente novamente em local mais aberto.'
     };
-    const motivo = motivos[err.code] || 'Erro desconhecido.';
+    const motivo = motivos[err.code] || 'Erro desconhecido ao capturar GPS.';
     info.innerHTML = '<span style="color:var(--er)">⚠ ' + motivo + '</span>';
-    if (err.code === 1) {
-      document.getElementById('modal-gps-permissao').classList.add('active');
+    if (err.code === 1){
+      showToast('error','GPS negado', motivo, 5000);
     } else {
       showToast('error','Falha no GPS', motivo, 5000);
     }
+    // Libera edição manual como plano B
+    campo.removeAttribute('readonly');
+    campo.style.cursor = 'text';
+    campo.style.background = 'var(--k3)';
+    campo.title = 'GPS não disponível — digite o endereço manualmente';
     btn.disabled = false;
-    btn.innerHTML = '📍 Usar GPS';
+    btn.innerHTML = '📍 Tentar Novamente';
   }
-  
-  // Estratégia em 2 etapas — sempre prioriza precisão:
-  // 1ª - GPS de SATÉLITE (alta precisão, ~3-15m de erro), até 20s
-  // 2ª - se falhar, posição aproximada via WiFi/celular (precisão ~50m a 5km)
-  //      e SÓ É USADA se a precisão for aceitável (< 200m)
-  info.innerHTML = '<span style="color:var(--g)">🛰️ Buscando GPS preciso (vá para perto da janela ou ao ar livre para melhor resultado)...</span>';
-  navigator.geolocation.getCurrentPosition(
-    _gpsSucesso,
-    function(err){
-      // GPS preciso falhou — tenta posição aproximada como fallback
-      info.innerHTML = '<span style="color:var(--g)">📡 Tentando localização aproximada via rede...</span>';
-      navigator.geolocation.getCurrentPosition(
-        function(pos){
-          if (pos.coords.accuracy > 5000){
-            // Precisão muito ruim (>5km) — provavelmente errada
-            info.innerHTML = '<span style="color:var(--er)">⚠ Localização muito imprecisa (' + Math.round(pos.coords.accuracy) + 'm). Verifique se o GPS está ligado e tente perto da janela ou ao ar livre.</span>';
-            showToast('warn','Localização imprecisa','Tente em local aberto para o GPS funcionar.', 6000);
-            btn.disabled = false;
-            btn.innerHTML = '📍 Tentar Novamente';
-          } else {
-            _gpsSucesso(pos);
-          }
-        },
-        _gpsErro,
-        { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 }
-      );
-    },
-    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-  );
 }
 
 async function salvarProva() {
