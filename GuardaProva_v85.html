@@ -1057,12 +1057,6 @@ html,body{height:100%;font-family:'Nunito',sans-serif;font-size:15px;background:
     <div class="sind-cta-desc">Diga ao seu sindicato sobre o programa. Nossa equipe entra em contato com a diretoria.</div>
     <div class="sind-cta-btn">Indicar agora →</div>
   </div>
-  <div class="sind-cta-box sind-cta-aderir" onclick="ctaSindicatoAderir()">
-    <div class="sind-cta-icon">🤝</div>
-    <div class="sind-cta-titulo">Sou Sindicato — quero aderir</div>
-    <div class="sind-cta-desc">Receba a proposta do GuardaProva Sindical (Bronze, Prata, Ouro, Diamante).</div>
-    <div class="sind-cta-btn">Receber proposta →</div>
-  </div>
 </div>
 
 </div>
@@ -1745,46 +1739,47 @@ async function capturarLocalizacao(){
       const resp = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&accept-language=pt-BR&zoom=18&addressdetails=1', { signal: ctrl.signal });
       const data = await resp.json();
       
+      // CAMINHO 1: cidade/UF (que o Nominatim acerta) entram automaticamente.
+      // A RUA fica como sugestão para conferência manual, porque geocoder
+      // gratuito erra rua em cidades menores. A prova real é a coordenada GPS.
+      let ruaSugerida = '';
       if (data && data.address){
         const addr = data.address;
-        // Monta endereço estruturado SEM número (GPS não captura número de imóvel)
         const rua = addr.road || addr.pedestrian || addr.footway || addr.path || '';
         const bairro = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || '';
         const cidade = addr.city || addr.town || addr.village || addr.municipality || '';
-        const uf = (addr.state_code || _siglaUF(addr.state) || '').toUpperCase();
-        
-        // Monta endereço final
-        const partes = [];
-        if (rua) partes.push(rua);
-        if (bairro) partes.push(bairro);
-        if (cidade) partes.push(cidade);
-        if (uf) partes.push(uf);
-        
-        const enderecoFinal = partes.join(', ').toUpperCase();
-        
-        if (enderecoFinal){
-          campo.value = enderecoFinal;
+        const uf = (_siglaUF(addr.state) || '').toUpperCase();
+
+        const cidadeUF = [cidade, uf].filter(Boolean).join(', ').toUpperCase();
+        if (cidadeUF){
+          campo.value = cidadeUF;
         }
-      } else if (data && data.display_name){
-        campo.value = data.display_name.toUpperCase();
+        ruaSugerida = [rua, bairro].filter(Boolean).join(', ').toUpperCase();
       }
-      
-      // Endereço em texto é apenas rótulo de apoio — sempre editável.
-      // A prova real é a coordenada GPS + data/hora, verificável no mapa.
+
+      // Campo sempre editável — o usuário completa/corrige a rua.
       campo.removeAttribute('readonly');
       campo.style.cursor = 'text';
       campo.style.background = 'var(--k3)';
-      campo.title = 'Endereço aproximado — edite se estiver errado. A prova real é a coordenada GPS.';
+      campo.title = 'Complete a rua e confira no mapa. A prova real é a coordenada GPS.';
 
-      const mapaLink = ' &nbsp;<a href="https://www.google.com/maps?q=' + lat + ',' + lng + '" target="_blank" rel="noopener" style="color:var(--g);font-weight:700;text-decoration:underline">📍 Ver no mapa</a>';
+      // Link que abre um mapa de verdade com pino no ponto exato
+      const mapaLink = ' &nbsp;<a href="https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng + '" target="_blank" rel="noopener" style="color:var(--g);font-weight:700;text-decoration:underline">📍 Ver no mapa</a>';
 
+      let statusPrec;
       if (precisao < 50){
-        info.innerHTML = '<span style="color:var(--eg)">✓ Local capturado pelo GPS (precisão ~' + precisao + 'm — excelente).</span>' + mapaLink;
+        statusPrec = '<span style="color:var(--eg)">✓ Ponto capturado (precisão ~' + precisao + 'm).</span>';
       } else if (precisao < 100){
-        info.innerHTML = '<span style="color:#F39C12">⚠ Precisão ~' + precisao + 'm — confira e edite o endereço se necessário.</span>' + mapaLink;
+        statusPrec = '<span style="color:#F39C12">⚠ Precisão ~' + precisao + 'm.</span>';
       } else {
-        info.innerHTML = '<span style="color:#E74C3C">✗ Precisão ~' + precisao + 'm — confira no mapa e edite o endereço.</span>' + mapaLink;
+        statusPrec = '<span style="color:#E74C3C">✗ Precisão ~' + precisao + 'm — confira no mapa.</span>';
       }
+
+      const dicaRua = ruaSugerida
+        ? '<span style="color:var(--ts)">Rua sugerida pelo GPS (confira): <strong>' + ruaSugerida + '</strong> — complete no campo acima.</span>'
+        : '<span style="color:var(--ts)">Digite a rua no campo acima.</span>';
+
+      info.innerHTML = statusPrec + mapaLink + '<br>' + dicaRua;
     } catch(e) { /* sem rede ou timeout — coordenadas já estão salvas */ }
     
     btn.disabled = false;
@@ -6339,70 +6334,7 @@ async function _baixarDossie() {
    status: 'ativo' (parceiro pagante) | 'fundador' (real, primeiro parceiro) | 'em_adesao' (em prospecção)
    publico: true (aparece no diretório) | false (oculto) */
 const _SINDICATOS_PARCEIROS_DB = {
-  'COMERCIO-MG-OPM': {
-    nome: 'SINDCOMERCIÁRIOS',
-    nomeCompleto: 'Sindicato dos Comerciários de Itabirito, Ouro Preto e Mariana',
-    inicial: 'C',
-    categoria: 'Comércio',
-    cidade: 'Itabirito / Ouro Preto / Mariana',
-    estado: 'MG',
-    plano: 'prata',
-    status: 'fundador',
-    publico: true,
-    departamentoJuridicoNome: 'Dra. Sirlene Maria Teixeira',
-    departamentoJuridicoOAB: 'OAB/MG 228.453',
-    departamentoJuridicoWhatsapp: '5531000000000',
-    departamentoJuridicoEmail: 'juridico@sindcomerciarios.org.br',
-    desde: '2024-01-15'
-  },
-  'MOTORISTAS-MG-BH': {
-    nome: 'Sindicato dos Motoristas',
-    nomeCompleto: 'Sindicato dos Motoristas de Caminhão de Belo Horizonte e Região',
-    inicial: 'M',
-    categoria: 'Motoristas',
-    cidade: 'Belo Horizonte',
-    estado: 'MG',
-    plano: 'ouro',
-    status: 'em_adesao',
-    publico: true,
-    departamentoJuridicoNome: 'Departamento Jurídico',
-    departamentoJuridicoOAB: '',
-    departamentoJuridicoWhatsapp: '5531000000000',
-    departamentoJuridicoEmail: 'juridico@sindmotoristas.org.br',
-    desde: '2026-01-01'
-  },
-  'METALURGICOS-SP-ABC': {
-    nome: 'Sindicato dos Metalúrgicos do ABC',
-    nomeCompleto: 'Sindicato dos Metalúrgicos do ABC Paulista',
-    inicial: 'M',
-    categoria: 'Metalúrgicos',
-    cidade: 'Santo André / São Bernardo / São Caetano',
-    estado: 'SP',
-    plano: 'diamante',
-    status: 'em_adesao',
-    publico: true,
-    departamentoJuridicoNome: 'Departamento Jurídico',
-    departamentoJuridicoOAB: '',
-    departamentoJuridicoWhatsapp: '5511000000000',
-    departamentoJuridicoEmail: 'juridico@smabc.org.br',
-    desde: '2026-02-01'
-  },
-  'BANCARIOS-RS-POA': {
-    nome: 'Sindicato dos Bancários',
-    nomeCompleto: 'Sindicato dos Bancários de Porto Alegre e Região',
-    inicial: 'B',
-    categoria: 'Bancários',
-    cidade: 'Porto Alegre',
-    estado: 'RS',
-    plano: 'ouro',
-    status: 'em_adesao',
-    publico: true,
-    departamentoJuridicoNome: 'Departamento Jurídico',
-    departamentoJuridicoOAB: '',
-    departamentoJuridicoWhatsapp: '5551000000000',
-    departamentoJuridicoEmail: 'juridico@bancariosrs.org.br',
-    desde: '2026-02-15'
-  }
+  // Vazio — entradas de teste removidas. Adicione sindicatos parceiros reais aqui.
 };
 
 const _SIND_KEY = 'gp_sindicato_associado'; // {codigo, nome, ativadoEm, ativoAte}
