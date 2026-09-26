@@ -1057,6 +1057,12 @@ html,body{height:100%;font-family:'Nunito',sans-serif;font-size:15px;background:
     <div class="sind-cta-desc">Diga ao seu sindicato sobre o programa. Nossa equipe entra em contato com a diretoria.</div>
     <div class="sind-cta-btn">Indicar agora →</div>
   </div>
+  <div class="sind-cta-box sind-cta-aderir" onclick="ctaSindicatoAderir()">
+    <div class="sind-cta-icon">🤝</div>
+    <div class="sind-cta-titulo">Sou Sindicato — quero aderir</div>
+    <div class="sind-cta-desc">Receba a proposta do GuardaProva Sindical (Bronze, Prata, Ouro, Diamante).</div>
+    <div class="sind-cta-btn">Receber proposta →</div>
+  </div>
 </div>
 
 </div>
@@ -1418,7 +1424,7 @@ function visualizarDoc(i) {
   if (doc.tipo.includes('image')) {
     conteudo = `<img src="${doc.dados}" class="documento-preview" style="max-height:600px;object-fit:contain;">`;
   } else if (doc.tipo.includes('pdf')) {
-    conteudo = `<iframe src="${doc.dados}" style="width:100%;height:70vh;border:none;border-radius:8px;background:#fff"></iframe>`;
+    conteudo = `<div id="pdf-container-${Date.now()}" class="pdf-container" style="width:100%;min-height:400px"></div>`;
   } else if (doc.tipo.includes('audio')) {
     const url = getUrlVisualizacao(doc);
     conteudo = `<audio controls preload="metadata" src="${url}" style="width:100%;"></audio>`;
@@ -1431,6 +1437,10 @@ function visualizarDoc(i) {
   }
   document.getElementById('modal-body-content').innerHTML = conteudo;
   document.getElementById('modal-viewer').classList.add('active');
+  if (doc.tipo.includes('pdf')) {
+    const c = document.querySelector('#modal-body-content .pdf-container');
+    if (c && window.renderPdfInline) window.renderPdfInline(doc.dados, c);
+  }
 }
 
 function fecharModal() {
@@ -1454,7 +1464,7 @@ function visualizarDocSalvo(provaId, docIndex) {
   if (doc.tipo.includes('image')) {
     conteudo = `<img src="${doc.dados}" class="documento-preview" style="max-height:600px;object-fit:contain;">`;
   } else if (doc.tipo.includes('pdf')) {
-    conteudo = `<iframe src="${doc.dados}" style="width:100%;height:70vh;border:none;border-radius:8px;background:#fff"></iframe>`;
+    conteudo = `<div id="pdf-container-${Date.now()}" class="pdf-container" style="width:100%;min-height:400px"></div>`;
   } else if (doc.tipo.includes('audio')) {
     const url = getUrlVisualizacao(doc);
     conteudo = `<audio controls preload="metadata" src="${url}" style="width:100%;"></audio>`;
@@ -1467,6 +1477,10 @@ function visualizarDocSalvo(provaId, docIndex) {
   }
   document.getElementById('modal-body-content').innerHTML = conteudo;
   document.getElementById('modal-viewer').classList.add('active');
+  if (doc.tipo.includes('pdf')) {
+    const c = document.querySelector('#modal-body-content .pdf-container');
+    if (c && window.renderPdfInline) window.renderPdfInline(doc.dados, c);
+  }
 }
 
 function imprimirDocSalvo(provaId, docIndex) {
@@ -1668,7 +1682,7 @@ function _siglaUF(nome){
   return map[limpo] || '';
 }
 
-async function capturarLocalizacao(){
+function capturarLocalizacao(){
   const btn = document.getElementById('btn-gps');
   const info = document.getElementById('novo-localizacao-info');
   const campo = document.getElementById('novo-localizacao');
@@ -1680,48 +1694,7 @@ async function capturarLocalizacao(){
   
   btn.disabled = true;
   btn.innerHTML = '⏳ Capturando...';
-  info.innerHTML = '<span style="color:var(--g)">🛰️ Buscando GPS preciso — até 3 tentativas...</span>';
-  
-  // ❶ Estratégia: até 3 tentativas de GPS satélite (8s cada), escolhe a mais precisa
-  // Para cedo se achar leitura excelente (<15m)
-  const leituras = [];
-  for (let tentativa = 1; tentativa <= 3; tentativa++){
-    info.innerHTML = '<span style="color:var(--g)">🛰️ Tentativa ' + tentativa + ' de 3 — aguarde...</span>';
-    try {
-      const pos = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 8000,
-          maximumAge: 0
-        });
-      });
-      leituras.push(pos);
-      // Achou leitura excelente? Não precisa mais tentar
-      if (pos.coords.accuracy < 15) break;
-    } catch(e) {
-      // Se todas as 3 falharam, tenta fallback aproximado (Wi-Fi/rede)
-      if (tentativa === 3 && leituras.length === 0){
-        info.innerHTML = '<span style="color:var(--g)">📡 GPS satélite falhou — tentando localização aproximada...</span>';
-        try {
-          const pos = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: false, timeout: 10000, maximumAge: 0
-            });
-          });
-          leituras.push(pos);
-        } catch(e2){
-          _gpsErro(e2);
-          return;
-        }
-      }
-    }
-  }
-  
-  if (leituras.length === 0){ _gpsErro({code:2}); return; }
-  
-  // Escolhe a leitura mais precisa (menor accuracy em metros)
-  leituras.sort((a,b) => a.coords.accuracy - b.coords.accuracy);
-  await _gpsSucesso(leituras[0]);
+  info.innerHTML = '<span style="color:var(--g)">🛰️ Obtendo coordenadas do GPS, aguarde...</span>';
   
   // Função interna que processa o resultado bem-sucedido
   async function _gpsSucesso(pos){
@@ -1730,56 +1703,59 @@ async function capturarLocalizacao(){
     const precisao = Math.round(pos.coords.accuracy);
     
     window._novaCoordenadas = { lat: lat, lng: lng, precisao: precisao, capturadoEm: Date.now() };
+    info.innerHTML = '<span style="color:var(--eg)">✓ Localização capturada — ' + lat.toFixed(6) + ', ' + lng.toFixed(6) + ' (precisão ~' + precisao + 'm)</span>';
+    showToast('success','Localização capturada','Buscando endereço...');
     
     // Tentar obter endereço (não bloqueia se falhar)
-    // Estratégia: Nominatim para rua/bairro/cidade (sem CEP — a prova real é a coordenada GPS)
+    // Estratégia: Nominatim para rua/bairro/cidade + ViaCEP (Correios) para CEP correto
     try {
       const ctrl = new AbortController();
       setTimeout(() => ctrl.abort(), 6000);
       const resp = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&accept-language=pt-BR&zoom=18&addressdetails=1', { signal: ctrl.signal });
       const data = await resp.json();
       
-      // CAMINHO 1: cidade/UF (que o Nominatim acerta) entram automaticamente.
-      // A RUA fica como sugestão para conferência manual, porque geocoder
-      // gratuito erra rua em cidades menores. A prova real é a coordenada GPS.
-      let ruaSugerida = '';
       if (data && data.address){
         const addr = data.address;
+        // Monta endereço estruturado SEM número (GPS não captura número de imóvel)
         const rua = addr.road || addr.pedestrian || addr.footway || addr.path || '';
         const bairro = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || '';
         const cidade = addr.city || addr.town || addr.village || addr.municipality || '';
-        const uf = (_siglaUF(addr.state) || '').toUpperCase();
-
-        const cidadeUF = [cidade, uf].filter(Boolean).join(', ').toUpperCase();
-        if (cidadeUF){
-          campo.value = cidadeUF;
+        const uf = (addr.state_code || _siglaUF(addr.state) || '').toUpperCase();
+        
+        // Buscar CEP correto via ViaCEP (banco oficial dos Correios)
+        let cepCerto = '';
+        if (rua && cidade && uf){
+          try {
+            const ufSigla = (addr.state_code || _siglaUF(addr.state) || '');
+            const urlVC = 'https://viacep.com.br/ws/' + encodeURIComponent(ufSigla) + '/' + encodeURIComponent(cidade) + '/' + encodeURIComponent(rua) + '/json/';
+            const respVC = await fetch(urlVC);
+            const dataVC = await respVC.json();
+            if (Array.isArray(dataVC) && dataVC.length > 0 && dataVC[0].cep){
+              cepCerto = dataVC[0].cep;
+            }
+          } catch(eVC) { /* sem CEP — segue sem ele */ }
         }
-        ruaSugerida = [rua, bairro].filter(Boolean).join(', ').toUpperCase();
+        
+        // Monta endereço final
+        const partes = [];
+        if (rua) partes.push(rua);
+        if (bairro) partes.push(bairro);
+        if (cidade) partes.push(cidade);
+        if (uf) partes.push(uf);
+        if (cepCerto) partes.push('CEP ' + cepCerto);
+        
+        const enderecoFinal = partes.join(', ').toUpperCase();
+        
+        if (!campo.value.trim()){
+          campo.value = enderecoFinal;
+        }
+        info.innerHTML = '<span style="color:var(--eg)">✓ Endereço capturado pelo GPS</span>';
+      } else if (data && data.display_name){
+        if (!campo.value.trim()){
+          campo.value = data.display_name.toUpperCase();
+        }
+        info.innerHTML = '<span style="color:var(--eg)">✓ Localização capturada — Precisão ~' + precisao + 'm</span>';
       }
-
-      // Campo sempre editável — o usuário completa/corrige a rua.
-      campo.removeAttribute('readonly');
-      campo.style.cursor = 'text';
-      campo.style.background = 'var(--k3)';
-      campo.title = 'Complete a rua e confira no mapa. A prova real é a coordenada GPS.';
-
-      // Link que abre um mapa de verdade com pino no ponto exato
-      const mapaLink = ' &nbsp;<a href="https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng + '" target="_blank" rel="noopener" style="color:var(--g);font-weight:700;text-decoration:underline">📍 Ver no mapa</a>';
-
-      let statusPrec;
-      if (precisao < 50){
-        statusPrec = '<span style="color:var(--eg)">✓ Ponto capturado (precisão ~' + precisao + 'm).</span>';
-      } else if (precisao < 100){
-        statusPrec = '<span style="color:#F39C12">⚠ Precisão ~' + precisao + 'm.</span>';
-      } else {
-        statusPrec = '<span style="color:#E74C3C">✗ Precisão ~' + precisao + 'm — confira no mapa.</span>';
-      }
-
-      const dicaRua = ruaSugerida
-        ? '<span style="color:var(--ts)">Rua sugerida pelo GPS (confira): <strong>' + ruaSugerida + '</strong> — complete no campo acima.</span>'
-        : '<span style="color:var(--ts)">Digite a rua no campo acima.</span>';
-
-      info.innerHTML = statusPrec + mapaLink + '<br>' + dicaRua;
     } catch(e) { /* sem rede ou timeout — coordenadas já estão salvas */ }
     
     btn.disabled = false;
@@ -1790,23 +1766,47 @@ async function capturarLocalizacao(){
     const motivos = {
       1: 'Permissão negada. Habilite localização nas configurações do navegador.',
       2: 'Sinal de GPS indisponível. Verifique se o GPS do aparelho está ligado.',
-      3: 'Tempo esgotado. Tente novamente em local mais aberto.'
+      3: 'Tempo esgotado. Tente novamente em local aberto ou perto da janela.'
     };
-    const motivo = motivos[err.code] || 'Erro desconhecido ao capturar GPS.';
+    const motivo = motivos[err.code] || 'Erro desconhecido.';
     info.innerHTML = '<span style="color:var(--er)">⚠ ' + motivo + '</span>';
-    if (err.code === 1){
-      showToast('error','GPS negado', motivo, 5000);
+    if (err.code === 1) {
+      document.getElementById('modal-gps-permissao').classList.add('active');
     } else {
       showToast('error','Falha no GPS', motivo, 5000);
     }
-    // Libera edição manual como plano B
-    campo.removeAttribute('readonly');
-    campo.style.cursor = 'text';
-    campo.style.background = 'var(--k3)';
-    campo.title = 'GPS não disponível — digite o endereço manualmente';
     btn.disabled = false;
-    btn.innerHTML = '📍 Tentar Novamente';
+    btn.innerHTML = '📍 Usar GPS';
   }
+  
+  // Estratégia em 2 etapas — sempre prioriza precisão:
+  // 1ª - GPS de SATÉLITE (alta precisão, ~3-15m de erro), até 20s
+  // 2ª - se falhar, posição aproximada via WiFi/celular (precisão ~50m a 5km)
+  //      e SÓ É USADA se a precisão for aceitável (< 200m)
+  info.innerHTML = '<span style="color:var(--g)">🛰️ Buscando GPS preciso (vá para perto da janela ou ao ar livre para melhor resultado)...</span>';
+  navigator.geolocation.getCurrentPosition(
+    _gpsSucesso,
+    function(err){
+      // GPS preciso falhou — tenta posição aproximada como fallback
+      info.innerHTML = '<span style="color:var(--g)">📡 Tentando localização aproximada via rede...</span>';
+      navigator.geolocation.getCurrentPosition(
+        function(pos){
+          if (pos.coords.accuracy > 5000){
+            // Precisão muito ruim (>5km) — provavelmente errada
+            info.innerHTML = '<span style="color:var(--er)">⚠ Localização muito imprecisa (' + Math.round(pos.coords.accuracy) + 'm). Verifique se o GPS está ligado e tente perto da janela ou ao ar livre.</span>';
+            showToast('warn','Localização imprecisa','Tente em local aberto para o GPS funcionar.', 6000);
+            btn.disabled = false;
+            btn.innerHTML = '📍 Tentar Novamente';
+          } else {
+            _gpsSucesso(pos);
+          }
+        },
+        _gpsErro,
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 0 }
+      );
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+  );
 }
 
 async function salvarProva() {
@@ -6334,7 +6334,70 @@ async function _baixarDossie() {
    status: 'ativo' (parceiro pagante) | 'fundador' (real, primeiro parceiro) | 'em_adesao' (em prospecção)
    publico: true (aparece no diretório) | false (oculto) */
 const _SINDICATOS_PARCEIROS_DB = {
-  // Vazio — entradas de teste removidas. Adicione sindicatos parceiros reais aqui.
+  'COMERCIO-MG-OPM': {
+    nome: 'SINDCOMERCIÁRIOS',
+    nomeCompleto: 'Sindicato dos Comerciários de Itabirito, Ouro Preto e Mariana',
+    inicial: 'C',
+    categoria: 'Comércio',
+    cidade: 'Itabirito / Ouro Preto / Mariana',
+    estado: 'MG',
+    plano: 'prata',
+    status: 'fundador',
+    publico: true,
+    departamentoJuridicoNome: 'Dra. Sirlene Maria Teixeira',
+    departamentoJuridicoOAB: 'OAB/MG 228.453',
+    departamentoJuridicoWhatsapp: '5531000000000',
+    departamentoJuridicoEmail: 'juridico@sindcomerciarios.org.br',
+    desde: '2024-01-15'
+  },
+  'MOTORISTAS-MG-BH': {
+    nome: 'Sindicato dos Motoristas',
+    nomeCompleto: 'Sindicato dos Motoristas de Caminhão de Belo Horizonte e Região',
+    inicial: 'M',
+    categoria: 'Motoristas',
+    cidade: 'Belo Horizonte',
+    estado: 'MG',
+    plano: 'ouro',
+    status: 'em_adesao',
+    publico: true,
+    departamentoJuridicoNome: 'Departamento Jurídico',
+    departamentoJuridicoOAB: '',
+    departamentoJuridicoWhatsapp: '5531000000000',
+    departamentoJuridicoEmail: 'juridico@sindmotoristas.org.br',
+    desde: '2026-01-01'
+  },
+  'METALURGICOS-SP-ABC': {
+    nome: 'Sindicato dos Metalúrgicos do ABC',
+    nomeCompleto: 'Sindicato dos Metalúrgicos do ABC Paulista',
+    inicial: 'M',
+    categoria: 'Metalúrgicos',
+    cidade: 'Santo André / São Bernardo / São Caetano',
+    estado: 'SP',
+    plano: 'diamante',
+    status: 'em_adesao',
+    publico: true,
+    departamentoJuridicoNome: 'Departamento Jurídico',
+    departamentoJuridicoOAB: '',
+    departamentoJuridicoWhatsapp: '5511000000000',
+    departamentoJuridicoEmail: 'juridico@smabc.org.br',
+    desde: '2026-02-01'
+  },
+  'BANCARIOS-RS-POA': {
+    nome: 'Sindicato dos Bancários',
+    nomeCompleto: 'Sindicato dos Bancários de Porto Alegre e Região',
+    inicial: 'B',
+    categoria: 'Bancários',
+    cidade: 'Porto Alegre',
+    estado: 'RS',
+    plano: 'ouro',
+    status: 'em_adesao',
+    publico: true,
+    departamentoJuridicoNome: 'Departamento Jurídico',
+    departamentoJuridicoOAB: '',
+    departamentoJuridicoWhatsapp: '5551000000000',
+    departamentoJuridicoEmail: 'juridico@bancariosrs.org.br',
+    desde: '2026-02-15'
+  }
 };
 
 const _SIND_KEY = 'gp_sindicato_associado'; // {codigo, nome, ativadoEm, ativoAte}
